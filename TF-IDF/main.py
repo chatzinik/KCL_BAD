@@ -68,38 +68,33 @@ WORDNET_LEMMATIZER = WordNetLemmatizer()
 
 # SUB-FUNCTIONS -----------------------------------------------------------------------------------#
 def filter_word(raw_word):
-
     uppercase_filtered_word = re.sub("([!?\"./*-_();:[]{}|~])", "", raw_word)
 
     return uppercase_filtered_word
 
 
 def remove_stopwords(not_checked_word):
-
     upper_word = not_checked_word.upper()
 
     for stopword in STOPWORDS:
 
         if upper_word == stopword:
-
             return None
 
     return upper_word
 
 
 def apply_stemming(not_stemmed_word):
-
     return STEMMER.stem(not_stemmed_word)
 
 
 def apply_lemmatization(not_lemmatized_word):
-
     return WORDNET_LEMMATIZER.lemmatize(not_lemmatized_word)
 
 
 def clean_word(raw_word):
-
     return remove_stopwords(apply_lemmatization(apply_stemming(filter_word(raw_word))))
+
 
 # MAIN --------------------------------------------------------------------------------------------#
 if __name__ == "__main__":
@@ -108,10 +103,12 @@ if __name__ == "__main__":
 
     # Get directories
     directories = [d for d in os.listdir(DATA_DIR)]
-    directories.remove('.DS_Store')
+
+    if '.DS_Store' in directories:
+        directories.remove('.DS_Store')
 
     # Load books
-    books_content = []         # List of books
+    books_content = []  # List of books
     for directory in directories:
 
         books = [b for b in os.listdir(DATA_DIR + "/" + directory)]
@@ -123,7 +120,7 @@ if __name__ == "__main__":
                     book_p = DATA_DIR + "/" + directory + "/" + book
                     with codecs.open(book_p, 'r', encoding='utf8') as book_lines:
 
-                        book_content = []   # A book as a list of words
+                        book_content = []  # A book as a list of words
                         for line in book_lines:
                             book_content.extend([clean_word(word) for word in line.split()])
                         books_content.append([w for w in book_content if w is not None])
