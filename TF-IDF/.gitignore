@@ -38,7 +38,7 @@ Thumbs.db
 
 # Directories
 ######################
-
+/books
 
 # IntelliJ
 ######################
@@ -168,3 +168,7 @@ ENV/
 # mypy
 ######################
 .mypy_cache/
+spark-2.0.1-bin-hadoop2.7/R/
+spark-2.0.1-bin-hadoop2.7/examples/jars/
+spark-2.0.1-bin-hadoop2.7/jars/
+spark-2.0.1-bin-hadoop2.7/yarn/
