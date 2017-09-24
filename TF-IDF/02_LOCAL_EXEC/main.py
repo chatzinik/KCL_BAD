@@ -4,20 +4,20 @@ Date:   21/05/2017
 Desc:   Main Code
 """
 # General IMPORTS ---------------------------------------------------------------------------------#
+import codecs
 import os
 import pickle
 import re
 import sys
-import codecs
-import nltk
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
 # NLTK IMPORTS ------------------------------------------------------------------------------------#
+import nltk
 from nltk.stem import SnowballStemmer, WordNetLemmatizer
 
 # SETTINGS IMPORTS --------------------------------------------------------------------------------#
-from settings import ROOT, DATA_DIR, STOPWORDS_DIR
+from settings import DATA_DIR, ROOT, STOPWORDS_DIR
 
 # PY-SPARK PATH SETUP AND IMPORTS -----------------------------------------------------------------#
 
@@ -40,7 +40,7 @@ except ImportError as error:
     sys.exit(1)
 
 # GLOBAL VARIABLES --------------------------------------------------------------------------------#
-spark_context = SparkContext('local[4]', 'TF-IDF Calculator')  # Instantiate a SparkContext object
+SC = SparkContext('local[4]', 'TF-IDF Calculator')  # Instantiate a SparkContext object
 
 # Load stopwrds
 STOPWORDS = []
@@ -63,6 +63,11 @@ DEBUG = False
 
 # SUB-FUNCTIONS -----------------------------------------------------------------------------------#
 def filter_word(raw_word):
+    """
+
+    :param raw_word:
+    :return:
+    """
     regex = re.compile(r'[^a-zA-Z]')
 
     uppercase_filtered_word = regex.sub("", raw_word)
@@ -75,6 +80,11 @@ def filter_word(raw_word):
 
 
 def remove_stopwords(not_checked_word):
+    """
+
+    :param not_checked_word:
+    :return:
+    """
     upper_word = not_checked_word.upper()
 
     for stopword in STOPWORDS:
@@ -86,25 +96,30 @@ def remove_stopwords(not_checked_word):
 
 
 def apply_stemming(not_stemmed_word):
+    """
+
+    :param not_stemmed_word:
+    :return:
+    """
     return STEMMER.stem(not_stemmed_word)
 
 
 def apply_lemmatization(not_lemmatized_word):
+    """
+
+    :param not_lemmatized_word:
+    :return:
+    """
     return WORDNET_LEMMATIZER.lemmatize(not_lemmatized_word)
 
 
 def clean_word(raw_word):
+    """
+
+    :param raw_word:
+    :return:
+    """
     return remove_stopwords(apply_lemmatization(apply_stemming(filter_word(raw_word))))
-
-
-def clean_book(parsed_book):
-    """
-    A function for cleaning each of the input books
-    :param parsed_book: a book converted to a list of parsed words (list[String])
-    :return: a sanitised list of words (list[String])
-    """
-
-    return [clean_word(word) for word in parsed_book.words]
 
 
 def idfs(corpus):
@@ -138,16 +153,19 @@ if __name__ == "__main__":
 
     # Get directories
     DIRECTORIES = [d for d in os.listdir(DATA_DIR)]
+    DIRECTORIES.remove('README.md')
 
     if '.DS_Store' in DIRECTORIES:
         DIRECTORIES.remove('.DS_Store')
 
+    print '\nBook dirs: ' + str(DIRECTORIES)
+
     if DEBUG:
-        print "To load books from: " + ", ".join(DIRECTORIES)
+        print 'To load books from: ' + ', '.join(DIRECTORIES)
 
     # Load books
-    books_content = []  # List of books
-    books_ids = []       # to be used for a books name
+    BOOKS_CONTENT = []   # List of books
+    BOOKS_IDS = []       # to be used for a books name
 
     for directory in DIRECTORIES:
 
@@ -158,16 +176,19 @@ if __name__ == "__main__":
             for book in books:
 
                 # Add book ID
-                books_ids.append(book)
+                BOOKS_IDS.append(book)
 
                 if DEBUG:
-                    print "Parsing book: " + book
+                    print "\nParsing book: " + book
 
                 try:
                     book_p = DATA_DIR + "/" + directory + "/" + book
                     with codecs.open(book_p, 'r', encoding='utf8') as book_lines:
 
                         book_content = []  # A book as a list of words
+
+                        # I am doing the cleaning here to reduce the ammount of data that will be
+                        # converted to an RDD.
                         for line in book_lines:
                             book_content.extend(line.split())
 
@@ -175,46 +196,48 @@ if __name__ == "__main__":
                             print "Parsing output: " + ", ".join(book_content)
                             raw_input("Press any key to continue to the next book:")
 
-                        books_content.append([w for w in book_content if w is not None])
+                        BOOKS_CONTENT.append([w for w in book_content if w is not None])
 
                 except IOError:
                     print IOError.message
                     print IOError.filename
                 pbar.update(1)
-        print
+            print
 
     # Instantiate RDD
-    BOOKS_RDD = spark_context.parallelize(books_content)
+    print 'Create Parsed Books RDD'
+    BOOKS_RDD = SC.parallelize(BOOKS_CONTENT)
+
+    # Clean lines
+    CLEANED_BOOKS_RDD = BOOKS_RDD.map(lambda ln: [clean_word(word) for word in ln])
 
     # Count Books to confirm they have all been successfully parsed
     NUMBER_OF_BOOKS = BOOKS_RDD.count()
-
-    # Clean Books ---------------------------------------------------------------------------------#
-    CLEANED_BOOKS_RDD = BOOKS_RDD.map(clean_book)
+    print 'Number of books added is ' + str(NUMBER_OF_BOOKS)
 
     # Create a dictionary -------------------------------------------------------------------------#
     print "----------------------------------------------------------------------------------------"
     raw_input('Produce IDF scores...')
 
-    DICTIONARY_RDD_IDFS = idfs(CLEANED_BOOKS_RDD)
+    DICTIONARY_RDD_IDFS = idfs(BOOKS_RDD)
     UNIQUE_TOKEN_COUNT = DICTIONARY_RDD_IDFS.count()
     print 'There are %s unique tokens in the dataset.' % UNIQUE_TOKEN_COUNT
 
-    idfs_tokens_sample = DICTIONARY_RDD_IDFS.takeOrdered(25, lambda s: s[1])
+    IDF_TOKENS_SAMPLE = DICTIONARY_RDD_IDFS.takeOrdered(25, lambda s: s[1])
     print 'This is a dictionary sample of 25 words:'
     print '\n'.join(map(lambda (token, idf_score): '{0}: {1}'.format(token, idf_score),
-                        idfs_tokens_sample))
+                        IDF_TOKENS_SAMPLE))
 
     # Collect weights as a sorted map in descending order and save them
     DICTIONARY_RDD_IDFS_WEIGHTS = DICTIONARY_RDD_IDFS\
         .sortBy(lambda (token, score): score).collectAsMap()
 
-    OUTPUT_1 = open('/Users/path/to/IDF-Weights.txt', "wb")
+    OUTPUT_1 = open('IDF-Weights/IDF-Weights.txt', "wb")
     OUTPUT_1.write("\n".join(map(lambda x: str(x), DICTIONARY_RDD_IDFS_WEIGHTS)))
     OUTPUT_1.close()
 
     # Write IDFS_weights_BV as python dictionary to a file
-    OUTPUT_2 = open('/Users/path/to/dictionary_RDD_IDFs_Weights.pkl', 'wb')
+    OUTPUT_2 = open('IDF-Weights/dictionary_RDD_IDFs_Weights.pkl', 'wb')
     pickle.dump(DICTIONARY_RDD_IDFS_WEIGHTS, OUTPUT_2)
     OUTPUT_2.close()
 
@@ -231,10 +254,10 @@ if __name__ == "__main__":
     print '----------------------------------------------------------------------------------------'
     raw_input('Save parsed books ...')
     # Add keys to parsed books
-    BOOKS_KV_RDD = spark_context.parallelize([books_ids, CLEANED_BOOKS_RDD.collect()]).collect()
+    BOOKS_KV_RDD = SC.parallelize([BOOKS_IDS, BOOKS_RDD.collect()]).collect()
 
     # Write books_KV_RDD as python dictionary to a file
-    OUTPUT_3 = open('/Users/path/to/books_KV_RDD.pkl', 'wb')
+    OUTPUT_3 = open('parsed-books/books_KV_RDD.pkl', 'wb')
     pickle.dump(BOOKS_KV_RDD, OUTPUT_3)
     OUTPUT_3.close()
 
