@@ -226,7 +226,7 @@ if __name__ == "__main__":
 
     # Instantiate RDD -------------------------------------------------------------------------------------------------#
     print('Create Parsed Books RDD')
-    BOOKS_RDD = SC.parallelize(BOOKS_CONTENT, numSlices=2500)
+    BOOKS_RDD = SC.parallelize(BOOKS_CONTENT, numSlices=2162)
 
     # Count Books to confirm they have all been successfully parsed
     NUMBER_OF_BOOKS = BOOKS_RDD.count()
@@ -263,7 +263,7 @@ if __name__ == "__main__":
     print('----------------------------------------------------------------------------------------')
     print('Save parsed books ...')
     # Add keys to parsed books
-    BOOKS_KV_RDD = SC.parallelize([BOOKS_IDS, CLEANED_BOOKS_RDD.collect()], numSlices=2500)\
+    BOOKS_KV_RDD = SC.parallelize([BOOKS_IDS, CLEANED_BOOKS_RDD.collect()], numSlices=2162)\
         .collectAsMap()
 
     # Write books_KV_RDD as python dictionary to a file (use wb as this is a serialised binary file)
