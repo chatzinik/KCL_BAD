@@ -263,8 +263,8 @@ if __name__ == "__main__":
     print('----------------------------------------------------------------------------------------')
     print('Save parsed books ...')
     # Add keys to parsed books
-    BOOKS_KV_RDD = SC.parallelize([BOOKS_IDS, CLEANED_BOOKS_RDD.collect()], numSlices=2162)\
-        .collectAsMap()
+    # TODO: Refer to https://stackoverflow.com/questions/14302248/dictionary-update-sequence-element-0-has-length-3-2-is-required
+    BOOKS_KV_RDD = SC.parallelize([BOOKS_IDS, CLEANED_BOOKS_RDD.collect()]).collectAsMap()
 
     # Write books_KV_RDD as python dictionary to a file (use wb as this is a serialised binary file)
     OUTPUT_2 = open('parsed_books/books_KV_RDD.pkl', 'wb')
