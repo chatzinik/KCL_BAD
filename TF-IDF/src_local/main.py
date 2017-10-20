@@ -3,24 +3,25 @@ Author: Christos Hadjinikolis
 Date:   21/05/2017
 Desc:   Main Code
 """
-# General IMPORTS -----------------------------------------------------------------------------------------------------#
+# General IMPORTS ---------------------------------------------------------------------------------#
 import codecs
 import os
 import pickle
 import re
 import sys
 import json
+import math
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
-# NLTK IMPORTS --------------------------------------------------------------------------------------------------------#
+# NLTK IMPORTS ------------------------------------------------------------------------------------#
 import nltk
 from nltk.stem import SnowballStemmer, WordNetLemmatizer
 
-# SETTINGS IMPORTS ----------------------------------------------------------------------------------------------------#
+# SETTINGS IMPORTS --------------------------------------------------------------------------------#
 from settings.paths import DATA_DIR, ROOT, STOPWORDS_DIR
 
-# PY-SPARK PATH SETUP AND IMPORTS -------------------------------------------------------------------------------------#
+# PY-SPARK PATH SETUP AND IMPORTS -----------------------------------------------------------------#
 
 # Path to source folder
 SPARK_HOME = ROOT + '/spark-2.2.0-bin-hadoop2.7'
@@ -40,7 +41,7 @@ except ImportError as error:
     print('Can not import Spark Modules', error)
     sys.exit(1)
 
-# GLOBAL VARIABLES ----------------------------------------------------------------------------------------------------#
+# GLOBAL VARIABLES --------------------------------------------------------------------------------#
 conf = SparkConf().setAppName("TF-IDF Calculator")
 conf = (conf.setAppName("App")
         .setMaster('local[*]')
@@ -69,7 +70,7 @@ WORDNET_LEMMATIZER = WordNetLemmatizer()
 DEBUG = True
 
 
-# SUB-FUNCTIONS -------------------------------------------------------------------------------------------------------#
+# SUB-FUNCTIONS -----------------------------------------------------------------------------------#
 def filter_word(word):
     """
     A function that filters words.
@@ -156,7 +157,7 @@ def idfs(corpus):
     :return: an RDD of (token, IDF value)
     """
 
-    number_of_instances = corpus.count()
+    documents_count = corpus.count()
 
     # The result of the next line will be a list with distinct tokens...
 
@@ -170,13 +171,12 @@ def idfs(corpus):
     token_sum_pair_tuple = token_count_pair_tuple.reduceByKey(lambda a, b: a + b)
 
     # compute weight
-    return token_sum_pair_tuple.map(lambda x: (x[0], float(number_of_instances) / x[1]))
+    return token_sum_pair_tuple.map(lambda x: (x[0], float(math.log(documents_count) / x[1]), 10))
 
-
-# MAIN ----------------------------------------------------------------------------------------------------------------#
+# MAIN --------------------------------------------------------------------------------------------#
 if __name__ == "__main__":
 
-    # LOAD ALL BOOKS AS A LIST OF LISTS -------------------------------------------------------------------------------#
+    # LOAD ALL BOOKS AS A LIST OF LISTS -----------------------------------------------------------#
 
     # Get directories
     DIRECTORIES = [d for d in os.listdir(DATA_DIR)]
@@ -224,20 +224,23 @@ if __name__ == "__main__":
                 pbar.update(1)
             print()
 
-    # Instantiate RDD -------------------------------------------------------------------------------------------------#
+    # Instantiate RDD -----------------------------------------------------------------------------#
     print('Create Parsed Books RDD')
     BOOKS_RDD = SC.parallelize(BOOKS_CONTENT, numSlices=2162)
 
     # Count Books to confirm they have all been successfully parsed
     NUMBER_OF_BOOKS = BOOKS_RDD.count()
-    print('Number of books added is ' + str(NUMBER_OF_BOOKS) + ", Partitions: " + str(BOOKS_RDD.getNumPartitions()))
+    print('Number of books added is '
+          + str(NUMBER_OF_BOOKS)
+          + ", Partitions: "
+          + str(BOOKS_RDD.getNumPartitions()))
 
     # Clean lines
     CLEANED_BOOKS_RDD = BOOKS_RDD\
         .map(lambda ln: list(filter(None.__ne__, [clean_word(word) for word in ln])))
 
-    # Create a dictionary ---------------------------------------------------------------------------------------------#
-    print("----------------------------------------------------------------------------------------")
+    # Create a dictionary -------------------------------------------------------------------------#
+    print("---------------------------------------------------------------------------------------")
     print('Produce IDF scores...')
 
     DICTIONARY_RDD_IDFS = idfs(CLEANED_BOOKS_RDD)
@@ -245,7 +248,8 @@ if __name__ == "__main__":
 
     IDF_TOKENS_SAMPLE = DICTIONARY_RDD_IDFS.takeOrdered(50, lambda s: -s[1])
     print('This is a dictionary sample of 25 words:')
-    print('\n'.join(map(lambda tuple_xx: '{0}: {1}'.format(tuple_xx[0], tuple_xx[1]), IDF_TOKENS_SAMPLE)))
+    print('\n'.join(map(lambda tuple_xx: '{0}: {1}'
+                        .format(tuple_xx[0], tuple_xx[1]), IDF_TOKENS_SAMPLE)))
 
     # Collect weights as a sorted map in descending order and save them
     DICTIONARY_RDD_IDFS_WEIGHTS = (DICTIONARY_RDD_IDFS
@@ -259,8 +263,8 @@ if __name__ == "__main__":
     pickle.dump(DICTIONARY_RDD_IDFS_WEIGHTS, OUTPUT_1)
     OUTPUT_1.close()
 
-    # SAVE PARSED BOOKS -----------------------------------------------------------------------------------------------#
-    print('----------------------------------------------------------------------------------------')
+    # SAVE PARSED BOOKS ---------------------------------------------------------------------------#
+    print('---------------------------------------------------------------------------------------')
     print('Save parsed books ...')
     # Add keys to parsed books
     # TODO: Refer to https://stackoverflow.com/questions/14302248/dictionary-update-sequence-element-0-has-length-3-2-is-required
@@ -271,8 +275,8 @@ if __name__ == "__main__":
     pickle.dump(BOOKS_KV_RDD, OUTPUT_2)
     OUTPUT_2.close()
 
-    # CREATE A HISTOGRAM ----------------------------------------------------------------------------------------------#
-    print('----------------------------------------------------------------------------------------')
+    # CREATE A HISTOGRAM --------------------------------------------------------------------------#
+    print('---------------------------------------------------------------------------------------')
     print('Create an IDF-scores histogram...')
 
     IDFS_VALUES = (DICTIONARY_RDD_IDFS_WEIGHTS
@@ -284,4 +288,4 @@ if __name__ == "__main__":
     plt.hist(IDFS_VALUES, 50, log=True)
     plt.show()
 
-# END OF FILE ---------------------------------------------------------------------------------------------------------#
+# END OF FILE -------------------------------------------------------------------------------------#
